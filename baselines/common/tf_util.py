@@ -305,3 +305,18 @@ def display_var_info(vars):
         if "/b:" in name: continue  # Wx+b, bias is not interesting to look at => count params, but not print
         logger.info("    %s%s%s" % (name, " " * (55 - len(name)), str(v.shape)))
     logger.info("Total model parameters: %0.1f million" % (count_params * 1e-6))
+
+# ================================================================
+# Saving variables
+# ================================================================
+
+
+def load_state(fname):
+    saver = tf.train.Saver()
+    saver.restore(get_session(), fname)
+
+
+def save_state(fname):
+    os.makedirs(os.path.dirname(fname), exist_ok=True)
+    saver = tf.train.Saver()
+    saver.save(get_session(), fname)

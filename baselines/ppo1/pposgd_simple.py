@@ -373,3 +373,53 @@ def learn(env, policy_fn, *,
 
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]
+
+
+def load_policy(env, policy_func, *,
+                clip_param, entcoeff,  # clipping parameter epsilon, entropy coeff
+                adam_epsilon=1e-5,
+                model_path, checkpoint):
+    # Setup losses and stuff
+    # ----------------------------------------
+    ob_space = env.observation_space
+    ac_space = env.action_space
+    pi = policy_func("pi", ob_space, ac_space)  # Construct network for new policy
+    oldpi = policy_func("oldpi", ob_space, ac_space)  # Network for old policy
+    atarg = tf.placeholder(dtype=tf.float32, shape=[None])  # Target advantage function (if applicable)
+    ret = tf.placeholder(dtype=tf.float32, shape=[None])  # Empirical return
+
+    lrmult = tf.placeholder(name='lrmult', dtype=tf.float32, shape=[])  # learning rate multiplier, updated with schedule
+    clip_param = clip_param * lrmult  # Annealed cliping parameter epislon
+
+    ob = U.get_placeholder_cached(name="ob")
+    ac = pi.pdtype.sample_placeholder([None])
+
+    kloldnew = oldpi.pd.kl(pi.pd)
+    ent = pi.pd.entropy()
+    meankl = U.mean(kloldnew)
+    meanent = U.mean(ent)
+    pol_entpen = (-entcoeff) * meanent
+
+    ratio = tf.exp(pi.pd.logp(ac) - oldpi.pd.logp(ac))  # pnew / pold
+    surr1 = ratio * atarg  # surrogate from conservative policy iteration
+    surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg  #
+    pol_surr = - U.mean(tf.minimum(surr1, surr2))  # PPO's pessimistic surrogate (L^CLIP)
+    vf_loss = U.mean(tf.square(pi.vpred - ret))
+    total_loss = pol_surr + pol_entpen + vf_loss
+    losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent]
+    loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
+
+    var_list = pi.get_trainable_variables()
+    lossandgrad = U.function([ob, ac, atarg, ret, lrmult], losses + [U.flatgrad(total_loss, var_list)])
+    adam = MpiAdam(var_list, epsilon=adam_epsilon)
+
+    assign_old_eq_new = U.function([], [], updates=[tf.assign(oldv, newv)
+                                                    for (oldv, newv) in zipsame(oldpi.get_variables(), pi.get_variables())])
+    compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
+
+    U.initialize()
+    adam.sync()
+
+    U.load_state(os.path.join(model_path, 'model-{}'.format(checkpoint)))
+
+    return pi

@@ -50,8 +50,9 @@ def main(config):
 
     id_name = 'PPO__'
     id_name += extra
+    id_name = datenow + '_' + id_name
 
-    config['id_name'] = datenow + '_' + id_name
+    config['id_name'] = id_name
 
     pathlib.Path(os.path.join(config['experiment_folder_fpath'], 'configs')).mkdir(parents=True, exist_ok=True)
     pathlib.Path(os.path.join(config['experiment_folder_fpath'], 'logs')).mkdir(parents=True, exist_ok=True)
