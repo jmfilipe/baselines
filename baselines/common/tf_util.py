@@ -6,6 +6,7 @@ import functools
 import collections
 import multiprocessing
 
+
 def switch(condition, then_expression, else_expression):
     """Switches between two operations depending on a scalar value (int or bool).
     Note that both `then_expression` and `else_expression`
@@ -23,6 +24,7 @@ def switch(condition, then_expression, else_expression):
     x.set_shape(x_shape)
     return x
 
+
 # ================================================================
 # Extras
 # ================================================================
@@ -31,6 +33,7 @@ def lrelu(x, leak=0.2):
     f1 = 0.5 * (1 + leak)
     f2 = 0.5 * (1 - leak)
     return f1 * x + f2 * abs(x)
+
 
 # ================================================================
 # Mathematical utils
@@ -43,6 +46,7 @@ def huber_loss(x, delta=1.0):
         tf.square(x) * 0.5,
         delta * (tf.abs(x) - 0.5 * delta)
     )
+
 
 # ================================================================
 # Global session
@@ -61,24 +65,35 @@ def make_session(num_cpu=None, make_default=False):
     else:
         return tf.Session(config=tf_config)
 
+
 def single_threaded_session():
     """Returns a session which will only use a single CPU"""
     return make_session(num_cpu=1)
+
 
 def in_session(f):
     @functools.wraps(f)
     def newfunc(*args, **kwargs):
         with tf.Session():
             f(*args, **kwargs)
+
     return newfunc
 
+
+def get_session():
+    """Returns recently made Tensorflow session"""
+    return tf.get_default_session()
+
+
 ALREADY_INITIALIZED = set()
+
 
 def initialize():
     """Initialize all the uninitialized variables in the global scope."""
     new_variables = set(tf.global_variables()) - ALREADY_INITIALIZED
     tf.get_default_session().run(tf.variables_initializer(new_variables))
     ALREADY_INITIALIZED.update(new_variables)
+
 
 # ================================================================
 # Model components
@@ -89,7 +104,9 @@ def normc_initializer(std=1.0):
         out = np.random.randn(*shape).astype(np.float32)
         out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
         return tf.constant(out)
+
     return _initializer
+
 
 def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", dtype=tf.float32, collections=None,
            summary_tag=None):
@@ -119,6 +136,7 @@ def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", 
                              max_images=10)
 
         return tf.nn.conv2d(x, w, stride_shape, pad) + b
+
 
 # ================================================================
 # Theano-like Function
@@ -194,6 +212,7 @@ class _Function(object):
         results = tf.get_default_session().run(self.outputs_update, feed_dict=feed_dict)[:-1]
         return results
 
+
 # ================================================================
 # Flat vectors
 # ================================================================
@@ -204,11 +223,14 @@ def var_shape(x):
         "shape function assumes that shape is fully known"
     return out
 
+
 def numel(x):
     return intprod(var_shape(x))
 
+
 def intprod(x):
     return int(np.prod(x))
+
 
 def flatgrad(loss, var_list, clip_norm=None):
     grads = tf.gradients(loss, var_list)
@@ -218,6 +240,7 @@ def flatgrad(loss, var_list, clip_norm=None):
         tf.reshape(grad if grad is not None else tf.zeros_like(v), [numel(v)])
         for (v, grad) in zip(var_list, grads)
     ])
+
 
 class SetFromFlat(object):
     def __init__(self, var_list, dtype=tf.float32):
@@ -237,6 +260,7 @@ class SetFromFlat(object):
     def __call__(self, theta):
         tf.get_default_session().run(self.op, feed_dict={self.theta: theta})
 
+
 class GetFlat(object):
     def __init__(self, var_list):
         self.op = tf.concat(axis=0, values=[tf.reshape(v, [numel(v)]) for v in var_list])
@@ -244,7 +268,9 @@ class GetFlat(object):
     def __call__(self):
         return tf.get_default_session().run(self.op)
 
+
 _PLACEHOLDER_CACHE = {}  # name -> (placeholder, dtype, shape)
+
 
 def get_placeholder(name, dtype, shape):
     if name in _PLACEHOLDER_CACHE:
@@ -256,8 +282,10 @@ def get_placeholder(name, dtype, shape):
         _PLACEHOLDER_CACHE[name] = (out, dtype, shape)
         return out
 
+
 def get_placeholder_cached(name):
     return _PLACEHOLDER_CACHE[name][0]
+
 
 def flattenallbut0(x):
     return tf.reshape(x, [-1, intprod(x.get_shape().as_list()[1:])])
@@ -274,7 +302,6 @@ def display_var_info(vars):
         name = v.name
         if "/Adam" in name or "beta1_power" in name or "beta2_power" in name: continue
         count_params += np.prod(v.shape.as_list())
-        if "/b:" in name: continue    # Wx+b, bias is not interesting to look at => count params, but not print
-        logger.info("    %s%s%s" % (name, " "*(55-len(name)), str(v.shape)))
-    logger.info("Total model parameters: %0.1f million" % (count_params*1e-6))
-
+        if "/b:" in name: continue  # Wx+b, bias is not interesting to look at => count params, but not print
+        logger.info("    %s%s%s" % (name, " " * (55 - len(name)), str(v.shape)))
+    logger.info("Total model parameters: %0.1f million" % (count_params * 1e-6))
